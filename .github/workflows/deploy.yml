@@ -33,40 +33,41 @@ jobs:
       - name: Setup SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DIGITAL_IP: ${{ secrets.DIGITAL_IP }} # 👈 Consistently map to DIGITAL_IP
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$DIGITAL_IP" >> ~/.ssh/known_hosts
       
       - name: Copy files to Droplet
         env:
-          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DIGITAL_IP: ${{ secrets.DIGITAL_IP }} #  Consistently map to DIGITAL_IP
         run: |
           # Create directory if it doesn't exist
-          ssh -i ~/.ssh/id_ed25519 root@$DROPLET_IP "mkdir -p /opt/live_chat"
+          ssh -i ~/.ssh/id_ed25519 root@$DIGITAL_IP "mkdir -p /opt/live_chat"
           
           # Copy Docker images
-          scp -i ~/.ssh/id_ed25519 live_chat.tar root@$DROPLET_IP:/root/
-          scp -i ~/.ssh/id_ed25519 nginx.tar root@$DROPLET_IP:/root/
+          scp -i ~/.ssh/id_ed25519 live_chat.tar root@$DIGITAL_IP:/root/
+          scp -i ~/.ssh/id_ed25519 nginx.tar root@$DIGITAL_IP:/root/
           
           # Copy docker-compose.yml and nginx.conf
-          scp -i ~/.ssh/id_ed25519 docker-compose.yml root@$DROPLET_IP:/opt/live_chat/
-          scp -i ~/.ssh/id_ed25519 nginx.conf root@$DROPLET_IP:/opt/live_chat/
+          scp -i ~/.ssh/id_ed25519 docker-compose.yml root@$DIGITAL_IP:/opt/live_chat/
+          scp -i ~/.ssh/id_ed25519 nginx.conf root@$DIGITAL_IP:/opt/live_chat/
           
           # Copy static files (if any changes)
-          scp -i ~/.ssh/id_ed25519 -r ./static root@$DROPLET_IP:/opt/live_chat/ 2>/dev/null || true
+          scp -i ~/.ssh/id_ed25519 -r ./static root@$DIGITAL_IP:/opt/live_chat/ 2>/dev/null || true
       
       - name: Deploy on Droplet
         env:
-          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DIGITAL_IP: ${{ secrets.DIGITAL_IP }} # Consistently map to DIGITAL_IP
         run: |
-          ssh -i ~/.ssh/id_ed25519 root@$DROPLET_IP << 'EOF'
+          # We pass DIGITAL_IP into the SSH session using an environment variable block or inline injection
+          ssh -i ~/.ssh/id_ed25519 root@$DIGITAL_IP "DIGITAL_IP=$DIGITAL_IP" 'bash -s' << 'EOF'
             cd /opt/live_chat
             
             # Load Docker images
-            echo " Loading Docker images..."
+            echo "Loading Docker images..."
             docker load -i /root/live_chat.tar
             docker load -i /root/nginx.tar
             rm -f /root/live_chat.tar /root/nginx.tar
@@ -76,21 +77,21 @@ jobs:
             docker compose down || true
             
             # Start new containers
-            echo " Starting new containers..."
+            echo "Starting new containers..."
             docker compose up -d
             
             # Clean up unused images
             docker image prune -f
             
             echo "Deployment complete!"
-            echo "App running at http://$DROPLET_IP"
+            echo "App running at http://$DIGITAL_IP"
           EOF
       
       - name: Verify deployment
         env:
-          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          DIGITAL_IP: ${{ secrets.DIGITAL_IP }}  
         run: |
           sleep 10
-          echo " Checking if app is running..."
-          curl -f http://$DROPLET_IP || exit 1
-          echo "App is running at http://$DROPLET_IP"
+          echo "Checking if app is running..."
+          curl -f http://$DIGITAL_IP || exit 1
+          echo "App is running at http://$DIGITAL_IP"
